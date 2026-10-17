@@ -1,0 +1,19 @@
+﻿services:
+  horus-scraper:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: horus_etl_extractor
+    ipc: host
+    shm_size: '2gb'
+    env_file:
+      - .env.example
+    environment:
+      - HEADLESS_MODE=true
+      - TZ=America/Argentina/La_Rioja
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+      - ./src:/app/src
+      - ./config:/app/config
+    restart: "no"

@@ -1,0 +1,30 @@
+# Entornos virtuales de Python
+venv/
+.venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Variables de entorno y secretos
+.env
+
+# Datos extraídos y checkpoints locales (se persisten en volumen local/nube, no en Git)
+data/landing_urls/*.csv
+data/landing_urls/*.parquet
+data/raw_extracted/*.csv
+data/raw_extracted/*.parquet
+data/raw_extracted/*.json
+
+# Logs de ejecución
+logs/*.log
+
+# Archivos del sistema e IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Caché de Playwright o Pytest
+.playwright/
+.pytest_cache/
