@@ -62,27 +62,27 @@ Configuración optimizada de memoria compartida (shm_size: '2gb' e ipc: host) en
 
 🗂️ Estructura del Repositorio
 
-horus-real-estate-lakehouse/
-├── config/
-│   └── settings.py          # Configuración centralizada, rutas y variables de entorno
-├── data/                    # Volumen persistente (excluido de Git vía .gitignore)
-│   ├── landing_urls/        # Fase 1: Catálogo de tarjetas y enlaces 'Ver más'
-│   └── raw_extracted/       # Fase 2: Dataset unificado (Tarjetas + Detalles + Medidas)
-├── databricks/              # Notebooks de PySpark y Spark SQL para el Lakehouse
-│   ├── 01_bronze_ingestion.py
-│   ├── 02_silver_cleansing_geocoding.py
-│   └── 03_gold_business_marts.sql
-├── logs/                    # Telemetría y registro de eventos (pipeline.log)
-├── src/                     # Código fuente modular del extractor
-│   ├── __init__.py
-│   ├── utils.py             # Logger, Jitter, Checkpointing e I/O incremental
-│   ├── extractor.py         # Parsing del DOM (Grilla de tarjetas y Ficha interna)
-│   └── main.py              # Orquestador del flujo de extracción
-├── .env.example             # Plantilla de parámetros de ejecución
-├── .gitignore               # Reglas de exclusión de datos crudos y binarios
-├── Dockerfile               # Definición de imagen basada en Playwright v1.63.0-noble
-├── docker-compose.yml       # Orquestación de servicios y mapeo de volúmenes
-└── requirements.txt         # Dependencias fijadas (pinned versions)
+### horus-real-estate-lakehouse/
+### ├── config/
+### │   └── settings.py          # Configuración centralizada, rutas y variables de entorno
+### ├── data/                    # Volumen persistente (excluido de Git vía .gitignore)
+### │   ├── landing_urls/        # Fase 1: Catálogo de tarjetas y enlaces 'Ver más'
+### │   └── raw_extracted/       # Fase 2: Dataset unificado (Tarjetas + Detalles + Medidas)
+### ├── databricks/              # Notebooks de PySpark y Spark SQL para el Lakehouse
+### │   ├── 01_bronze_ingestion.py
+### │   ├── 02_silver_cleansing_geocoding.py
+### │   └── 03_gold_business_marts.sql
+### ├── logs/                    # Telemetría y registro de eventos (pipeline.log)
+### ├── src/                     # Código fuente modular del extractor
+### │   ├── __init__.py
+### │   ├── utils.py             # Logger, Jitter, Checkpointing e I/O incremental
+### │   ├── extractor.py         # Parsing del DOM (Grilla de tarjetas y Ficha interna)
+### │   └── main.py              # Orquestador del flujo de extracción
+### ├── .env.example             # Plantilla de parámetros de ejecución
+### ├── .gitignore               # Reglas de exclusión de datos crudos y binarios
+### ├── Dockerfile               # Definición de imagen basada en Playwright v1.63.0-noble
+### ├── docker-compose.yml       # Orquestación de servicios y mapeo de volúmenes
+### └── requirements.txt         # Dependencias fijadas (pinned versions)
 
 ---
 
