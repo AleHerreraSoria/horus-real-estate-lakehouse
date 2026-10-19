@@ -1,7 +1,7 @@
 -- Databricks notebook source
 -- MAGIC %md
 -- MAGIC # 🥇 Capa Gold: Data Marts de Negocio para Inmobiliaria Horus
--- MAGIC Construye las tablas analíticas listas para conectar a Dashboards, BI o microservicios web.
+-- MAGIC Construcción de las tablas analíticas para conectar a Dashboards, BI o microservicios web.
 
 -- COMMAND ----------
 
@@ -10,7 +10,7 @@ USE SCHEMA horus_lakehouse;
 
 -- COMMAND ----------
 
--- 1. DATA MART: TASADOR INTELIGENTE Y MONITOR DE M2 POR BARRIO
+-- 1. TASADOR INTELIGENTE Y MONITOR DE PRECIO DE M2 / BARRIO
 CREATE OR REPLACE TABLE gold_tasador_barrios AS
 SELECT 
     operacion_busqueda,
@@ -36,7 +36,7 @@ SELECT * FROM gold_tasador_barrios LIMIT 20;
 
 -- COMMAND ----------
 
--- 2. DATA MART: AUDITORÍA DE CALIDAD DE CARTERA (ALERTA PARA ADMINISTRACIÓN XINTEL)
+-- 2. AUDITORÍA DE CALIDAD DE LA INFORMACIÓN DE CARTERA PUBLICADA EN LA WEB (ALERTA PARA ADMINISTRACIÓN XINTEL)
 CREATE OR REPLACE TABLE gold_auditoria_calidad_crm AS
 SELECT 
     codigo_ficha,
@@ -66,7 +66,7 @@ SELECT * FROM gold_auditoria_calidad_crm;
 
 -- COMMAND ----------
 
--- 3. DATA MART: MOTOR DE RECOMENDACIÓN DE PROPIEDADES SIMILARES (TOP 3 ALTERNATIVAS POR FICHA)
+-- 3. MOTOR DE RECOMENDACIÓN DE PROPIEDADES SIMILARES (TOP 3 ALTERNATIVAS POR FICHA)
 CREATE OR REPLACE TABLE gold_recomendador_similares AS
 WITH pares_similares AS (
     SELECT 
@@ -116,3 +116,106 @@ WHERE ranking_sugerencia <= 3
 ORDER BY ficha_consultada, ranking_sugerencia;
 
 SELECT * FROM gold_recomendador_similares LIMIT 30;
+
+-- COMMAND ----------
+
+-- DBTITLE 1,Mapa de Propiedades
+-- MAGIC %md
+-- MAGIC ## 🗺️ Mapa Interactivo: Propiedades en Venta en La Rioja Capital
+-- MAGIC Geocodificación de direcciones (OpenStreetMap Nominatim) + visualización con Folium.
+-- MAGIC Cada pin muestra tipo, precio, barrio y enlace a la ficha original.
+
+-- COMMAND ----------
+
+-- DBTITLE 1,Geocodificación de direcciones
+-- MAGIC %python
+-- MAGIC import requests
+-- MAGIC import time
+-- MAGIC from pyspark.sql import functions as F
+-- MAGIC
+-- MAGIC # --- 1. Cargar propiedades en venta en La Rioja Capital ---
+-- MAGIC df_silver = spark.table("workspace.horus_lakehouse.silver_propiedades_limpias")
+-- MAGIC props = (
+-- MAGIC     df_silver.filter(
+-- MAGIC         (F.col("operacion_busqueda") == "Compra")
+-- MAGIC         & (F.col("localidad") == "La Rioja")
+-- MAGIC         & F.col("query_geocodificacion").isNotNull()
+-- MAGIC     )
+-- MAGIC     .select(
+-- MAGIC         "id_unico", "tipo_propiedad", "direccion_limpia", "barrio",
+-- MAGIC         "query_geocodificacion", "precio_valor", "moneda", "url_ficha",
+-- MAGIC         "sup_total_m2", "dormitorios",
+-- MAGIC     )
+-- MAGIC     .toPandas()
+-- MAGIC )
+-- MAGIC
+-- MAGIC unique_addresses = props["query_geocodificacion"].unique()
+-- MAGIC print(f"Geocodificando {len(unique_addresses)} direcciones únicas...")
+-- MAGIC
+-- MAGIC # --- 2. Geocodificar via OpenStreetMap Nominatim (gratis, 1 req/seg) ---
+-- MAGIC NOMINATIM_URL = "https://nominatim.openstreetmap.org/search"
+-- MAGIC HEADERS = {"User-Agent": "HorusRealEstateLakehouse/1.0"}
+-- MAGIC
+-- MAGIC geocode_cache = {}
+-- MAGIC for i, addr in enumerate(unique_addresses):
+-- MAGIC     try:
+-- MAGIC         resp = requests.get(
+-- MAGIC             NOMINATIM_URL,
+-- MAGIC             params={"q": addr, "format": "json", "limit": 1, "countrycodes": "ar"},
+-- MAGIC             headers=HEADERS,
+-- MAGIC             timeout=10,
+-- MAGIC         )
+-- MAGIC         if resp.ok and resp.json():
+-- MAGIC             data = resp.json()[0]
+-- MAGIC             geocode_cache[addr] = (float(data["lat"]), float(data["lon"]))
+-- MAGIC     except Exception:
+-- MAGIC         pass
+-- MAGIC     if (i + 1) % 50 == 0:
+-- MAGIC         print(f"  Progreso: {i + 1}/{len(unique_addresses)} ({len(geocode_cache)} exitosos)")
+-- MAGIC     time.sleep(1)  # rate limit Nominatim
+-- MAGIC
+-- MAGIC print(f"✅ Geocodificación completa: {len(geocode_cache)}/{len(unique_addresses)} direcciones encontradas")
+-- MAGIC
+-- MAGIC # --- 3. Mergear coordenadas al dataset completo ---
+-- MAGIC props["lat"] = props["query_geocodificacion"].map(lambda x: geocode_cache.get(x, (None, None))[0])
+-- MAGIC props["lon"] = props["query_geocodificacion"].map(lambda x: geocode_cache.get(x, (None, None))[1])
+-- MAGIC props_geocoded = props.dropna(subset=["lat", "lon"])
+-- MAGIC print(f"Propiedades con coordenadas: {len(props_geocoded)}/{len(props)}")
+
+-- COMMAND ----------
+
+-- DBTITLE 1,Instalar folium
+-- MAGIC %python
+-- MAGIC %pip install folium --quiet
+
+-- COMMAND ----------
+
+-- DBTITLE 1,Renderizado del mapa interactivo
+-- MAGIC %python
+-- MAGIC import folium
+-- MAGIC from folium.plugins import MarkerCluster
+-- MAGIC
+-- MAGIC # --- Crear mapa centrado en La Rioja Capital ---
+-- MAGIC m = folium.Map(location=[-29.4117, -66.8507], zoom_start=13, tiles="OpenStreetMap")
+-- MAGIC marker_cluster = MarkerCluster().add_to(m)
+-- MAGIC
+-- MAGIC for _, row in props_geocoded.iterrows():
+-- MAGIC     precio_fmt = f"{row['precio_valor']:,.0f}"
+-- MAGIC     popup_html = f"""
+-- MAGIC     <div style="font-family: Arial; min-width: 200px;">
+-- MAGIC         <b style="color: #d4af37;">{row['tipo_propiedad']}</b><br>
+-- MAGIC         📍 Barrio: {row['barrio']}<br>
+-- MAGIC         💰 Precio: {row['moneda']} {precio_fmt}<br>
+-- MAGIC         🏠 Dormitorios: {row['dormitorios']}<br>
+-- MAGIC         📐 Superficie: {row['sup_total_m2']} m²<br>
+-- MAGIC         <a href="{row['url_ficha']}" target="_blank" style="color: #0066cc;">Ver ficha completa →</a>
+-- MAGIC     </div>
+-- MAGIC     """
+-- MAGIC     folium.Marker(
+-- MAGIC         location=[row["lat"], row["lon"]],
+-- MAGIC         popup=folium.Popup(popup_html, max_width=300),
+-- MAGIC         tooltip=f"{row['tipo_propiedad']} - {row['barrio']}",
+-- MAGIC     ).add_to(marker_cluster)
+-- MAGIC
+-- MAGIC print(f"✅ Mapa generado con {len(props_geocoded)} propiedades geocodificadas")
+-- MAGIC displayHTML(m._repr_html_())

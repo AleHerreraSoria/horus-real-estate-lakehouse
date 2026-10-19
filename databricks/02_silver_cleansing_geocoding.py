@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "6"
+# ///
 # MAGIC %md
 # MAGIC # 🥈 Capa Silver: Limpieza, Tipado, Reglas de Calidad y Enriquecimiento Geográfico
 # MAGIC Transforma la tabla Bronze en un modelo dimensional limpio (`silver_propiedades_limpias`), normalizando monedas, superficies, barrios y servicios.
@@ -17,19 +21,35 @@ df_bronze = spark.table(tabla_bronze)
 
 # COMMAND ----------
 
-# 1. Función auxiliar para limpiar números con formato argentino (ej. "78.500.000" o "161.60")
+# 1. Función auxiliar para expresar números con formato AR (ej. "78.500.000" o "161.60")
 def limpiar_superficie_col(col_name):
     return (
         F.regexp_extract(
-            F.regexp_replace(F.coalesce(F.col(col_name), F.lit("")), ",", "."),
+            F.regexp_replace(F.col(col_name), ",", "."),
             r"(\d+(?:\.\d+)?)", 1
         ).cast(DoubleType())
     )
 
+# ///////////// FUNCIONAMIENTO DE LA REGEX /////////////
+# Busca y captura números enteros o decimales. Se lee de izquierda a derecha:
+# • ( y ) (Grupo de captura principal): Todo lo que está dentro de los paréntesis externos se guardará en memoria para usar ese número después.
+# • \d+ (Uno o más dígitos): Busca uno o más números del 0 al 9. Esto coincide con la parte entera del número.
+# • (?:\.\d+)? (Grupo de no captura opcional): Este bloque busca la parte decimal.
+#	• (?: y ): Es un grupo de "no captura". Sirve para agrupar caracteres, pero le dice al sistema que no necesita guardar esta parte por separado en la memoria.
+#	• \.: Busca un punto literal (el punto decimal). Se usa la barra invertida \ porque "el punto solo" tiene otro significado en Regex.
+#	• \d+: Busca uno o más dígitos (los números después del punto).
+#	• ?: Hace que todo este grupo decimal sea opcional. Significa que puede aparecer una vez o ninguna.
+
+# ¿Qué tipo de textos encuentra?
+# Por el signo de interrogación final, la REGEX coincide tanto con números enteros como con decimales:
+#   • Ejemplos válidos: 15, 3.14, 0.5, 1000
+#   • Ejemplos no válidos: abc (letras), 15. (falta el número después del punto).
+# /////////////
+
 # 2. Transformación integral con PySpark
 df_silver = (
     df_bronze
-    # Deduplicación garantizada por id_unico quedándose con la extracción más reciente
+    # Deduplicación garantizada por id_unico. Se queda con la extracción más reciente
     .dropDuplicates(["id_unico"])
     
     # --- A. NORMALIZACIÓN DE MONEDA Y PRECIO ---
@@ -74,6 +94,23 @@ df_silver = (
         ).otherwise(None)
     )
     
+    # --- B.1 CORRECCIÓN MANUAL: FICHA hia406 (dirección y barrio mal extraídos del scraping) ---
+    .withColumn(
+        "direccion_limpia",
+        F.when(F.col("codigo_ficha") == "hia406", F.lit("Av. Carlos Saúl Menem 653"))
+         .otherwise(F.col("direccion_limpia"))
+    )
+    .withColumn(
+        "barrio",
+        F.when(F.col("codigo_ficha") == "hia406", F.lit("EVITA"))
+         .otherwise(F.col("barrio"))
+    )
+    .withColumn(
+        "query_geocodificacion",
+        F.when(F.col("codigo_ficha") == "hia406", F.lit("Av. Carlos Saúl Menem 653, La Rioja, La Rioja, Argentina"))
+         .otherwise(F.col("query_geocodificacion"))
+    )
+    
     # --- C. MÉTRICAS DE AMBIENTES (PRIORIZANDO DETALLE DE FICHA SOBRE TARJETA) ---
     .withColumn(
         "dormitorios",
@@ -105,7 +142,7 @@ df_silver = (
     .withColumn("sup_semicubierta_m2", limpiar_superficie_col("medida_sup_semi_cubierta"))
     .withColumn("sup_terreno_m2", limpiar_superficie_col("medida_sup_terreno"))
     
-    # --- E. CÁLCULO DE VALOR DEL M2 ---
+    # --- E. CÁLCULO DE VALOR PROMEDIO DEL M2 SOBRE LA SUP TOTAL DEL TERRENO EN M2 ---
     .withColumn(
         "precio_m2_total",
         F.when((F.col("precio_valor") > 0) & (F.col("sup_total_m2") > 0), 
@@ -150,5 +187,25 @@ df_silver_final = df_silver.select(*columnas_clave)
     .saveAsTable(tabla_silver)
 )
 
-print(f"✅ Tabla Silver creada con éxito: {tabla_silver} | Total filas limpias: {df_silver_final.count()}")
+print(f"Tabla Silver creada con éxito: {tabla_silver} | Total filas limpias: {df_silver_final.count()}")
 display(spark.table(tabla_silver).limit(15))
+
+# COMMAND ----------
+
+# MAGIC %sql
+# MAGIC with stats as (
+# MAGIC     select 
+# MAGIC         round(min(precio_valor),2)  as minimo,
+# MAGIC         round(mean(precio_valor),2) as media,
+# MAGIC         round(avg(precio_valor),2)  as promedio,
+# MAGIC         round(max(precio_valor),2)  as maximo
+# MAGIC     from workspace.horus_lakehouse.silver_propiedades_limpias
+# MAGIC     where moneda='ARS'
+# MAGIC )
+# MAGIC select 'min'  as metrica, minimo   as valor from stats
+# MAGIC union all
+# MAGIC select 'mean' as metrica, media    as valor from stats
+# MAGIC union all
+# MAGIC select 'avg'  as metrica, promedio as valor from stats
+# MAGIC union all
+# MAGIC select 'max'  as metrica, maximo   as valor from stats

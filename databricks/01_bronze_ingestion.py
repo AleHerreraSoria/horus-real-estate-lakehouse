@@ -1,4 +1,8 @@
 # Databricks notebook source
+# /// script
+# [tool.databricks.environment]
+# environment_version = "6"
+# ///
 # MAGIC %md
 # MAGIC # 🥉 Capa Bronze: Ingesta Cruda del Catálogo Horus
 # MAGIC Lee el archivo `propiedades_horus_completo.csv` desde un Volume de Unity Catalog y lo persiste en formato **Delta Lake** con columnas de linaje y auditoría.
@@ -8,7 +12,7 @@
 from pyspark.sql import functions as F
 
 # 1. Configuración de Esquema y Volumen en Unity Catalog
-# (En Databricks Free Edition el catálogo por defecto suele ser 'workspace' o 'main')
+# (En Databricks Free Edition el catálogo por defecto suele ser 'workspace')
 CATALOG_NAME = "workspace"
 SCHEMA_NAME = "horus_lakehouse"
 VOLUME_NAME = "landing_zone"
@@ -19,7 +23,7 @@ spark.sql(f"CREATE VOLUME IF NOT EXISTS {CATALOG_NAME}.{SCHEMA_NAME}.{VOLUME_NAM
 ruta_csv_volumen = f"/Volumes/{CATALOG_NAME}/{SCHEMA_NAME}/{VOLUME_NAME}/propiedades_horus_completo.csv"
 tabla_bronze = f"{CATALOG_NAME}.{SCHEMA_NAME}.bronze_propiedades_raw"
 
-print(f"✅ Volumen listo. Subí tu archivo CSV a: {ruta_csv_volumen}")
+print(f"Volumen listo. Subir el archivo CSV a: {ruta_csv_volumen}")
 
 # COMMAND ----------
 
@@ -49,5 +53,5 @@ df_bronze = (
     .saveAsTable(tabla_bronze)
 )
 
-print(f"🎉 Tabla Bronze creada con éxito: {tabla_bronze} | Total filas: {df_bronze.count()}")
+print(f"La Capa Bronze se creada con éxito: {tabla_bronze} | Total filas: {df_bronze.count()}")
 display(spark.table(tabla_bronze).limit(10))
